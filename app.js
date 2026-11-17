@@ -46,33 +46,82 @@ function fmt(m) {
   return m + '배';
 }
 
-/* ---------- 도감 데이터 (PokéAPI GraphQL, 한 번 받아서 기기에 저장) ---------- */
+/* ---------- 도감 데이터 (GitHub CSV 우선, 실패하면 PokéAPI GraphQL, 한 번 받아서 기기에 저장) ---------- */
+const CACHE_KEY = 'pc_dex_v2';
+const CSV_BASE = 'https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/';
+const TYPE_BY_ID = {1:'normal',2:'fighting',3:'flying',4:'poison',5:'ground',6:'rock',7:'bug',8:'ghost',9:'steel',10:'fire',11:'water',12:'grass',13:'electric',14:'psychic',15:'ice',16:'dragon',17:'dark',18:'fairy'};
+let DEX = [];
+
+function parseCSV(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows.slice(1);
+}
+async function getCSV(name) {
+  const r = await fetch(CSV_BASE + name);
+  if (!r.ok) throw new Error(name + ' HTTP ' + r.status);
+  return parseCSV(await r.text());
+}
+async function loadFromCSV() {
+  const [names, types] = await Promise.all([getCSV('pokemon_species_names.csv'), getCSV('pokemon_types.csv')]);
+  const ko = {}, en = {};
+  for (const [id, lang, name] of names) {
+    const n = +id;
+    if (n > 1025) continue;
+    if (lang === '3') ko[n] = name; else if (lang === '9') en[n] = name;
+  }
+  const ty = {};
+  for (const [pid, tid, slot] of types) {
+    const n = +pid;
+    if (n > 1025 || !TYPE_BY_ID[tid]) continue;
+    (ty[n] = ty[n] || []).push([+slot, TYPE_BY_ID[tid]]);
+  }
+  const list = [];
+  for (let id = 1; id <= 1025; id++) {
+    if (!ty[id]) continue;
+    list.push({id, ko: ko[id] || en[id] || ('#' + id), en: en[id] || '', types: ty[id].sort((a, b) => a[0] - b[0]).map(x => x[1])});
+  }
+  return list;
+}
+
 const GQL = 'https://beta.pokeapi.co/graphql/v1beta';
 const QUERY = `query{pokemon_v2_pokemonspecies(order_by:{id:asc}){id
  pokemon_v2_pokemonspeciesnames(where:{pokemon_v2_language:{name:{_in:["ko","en"]}}}){name pokemon_v2_language{name}}
  pokemon_v2_pokemons(where:{is_default:{_eq:true}}){pokemon_v2_pokemontypes(order_by:{slot:asc}){pokemon_v2_type{name}}}}}`;
-const CACHE_KEY = 'pc_dex_v1';
-let DEX = [];
-
-async function loadDex() {
-  try {
-    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-    if (c && c.length > 900) return c;
-  } catch (e) {}
-  const r = await fetch(GQL, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({query: QUERY})
-  });
+async function loadFromGQL() {
+  const r = await fetch(GQL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: QUERY})});
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const j = await r.json();
-  const list = j.data.pokemon_v2_pokemonspecies.map(s => {
+  return j.data.pokemon_v2_pokemonspecies.map(s => {
     const names = s.pokemon_v2_pokemonspeciesnames;
     const get = l => (names.find(n => n.pokemon_v2_language.name === l) || {}).name;
     const p = s.pokemon_v2_pokemons[0];
     const types = p ? p.pokemon_v2_pokemontypes.map(t => t.pokemon_v2_type.name).filter(t => TYPE_KO[t]) : [];
     return {id: s.id, ko: get('ko') || get('en') || ('#' + s.id), en: get('en') || '', types};
   }).filter(p => p.types.length);
+}
+
+async function loadDex() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (c && c.length > 900) return c;
+  } catch (e) {}
+  let list, e1;
+  try { list = await loadFromCSV(); } catch (e) { e1 = e; }
+  if (!list || list.length < 900) {
+    try { list = await loadFromGQL(); }
+    catch (e2) { throw new Error('CSV: ' + (e1 ? e1.message : '데이터 부족') + ' / GQL: ' + e2.message); }
+  }
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(list)); } catch (e) {}
   return list;
 }
