@@ -1,13 +1,19 @@
 {
+  "id": "./",
   "name": "Poké Counter",
-  "short_name": "PokéCounter",
+  "short_name": "Poké Counter",
+  "description": "타깃 포켓몬의 약점과 상성 좋은 카운터를 알려줘요 (일반 / 포켓몬 GO)",
+  "lang": "ko",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#14161f",
   "theme_color": "#14161f",
   "icons": [
-    {"src": "icon-180.png", "sizes": "180x180", "type": "image/png"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "icon-180.png", "sizes": "180x180", "type": "image/png"}
   ]
 }

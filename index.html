@@ -19,6 +19,10 @@ body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,Bli
 h1{font-size:20px;margin:6px 0 2px;letter-spacing:.5px}
 h1 span{color:var(--ac)}
 .sub{color:var(--sub);font-size:13px;margin:0 0 14px}
+#install{display:none;width:100%;margin:0 0 12px;padding:11px 14px;border-radius:10px;border:1px solid var(--line,#2a2e3d);background:#e84a4a;color:#fff;font:700 14px/1.2 inherit;cursor:pointer}
+#install.show{display:block}
+#iosHint{display:none;margin:0 0 12px;padding:10px 12px;border-radius:10px;border:1px dashed #3a3f55;font-size:12.5px;color:var(--sub)}
+#iosHint.show{display:block}
 input[type=search],input[type=text]{width:100%;font-size:17px;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--tx);outline:none}
 input:focus{border-color:var(--ac)}
 .sug{margin-top:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -48,6 +52,19 @@ h3{margin:0 0 8px;font-size:15px}
 .small{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.5}
 .hide{display:none}
 .msg{color:var(--sub);text-align:center;padding:24px 8px;font-size:14px}
+
+.row b{width:auto;min-width:44px}
+.seg{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;margin-top:10px}
+.seg button{flex:1;padding:9px 6px;border:0;border-radius:8px;background:none;color:var(--sub);font-size:13px;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--ac);color:#12141c}
+details.card summary{cursor:pointer;font-weight:700;font-size:15px}
+.sub2{color:var(--sub);font-weight:400}
+textarea{width:100%;font-size:16px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);margin-top:4px;font-family:inherit;resize:vertical}
+.ownlist{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.oc{display:inline-flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:2px 4px 2px 6px;font-size:13px}
+.oc img{width:28px;height:28px}
+.oc button{border:0;background:none;color:var(--sub);font-size:14px;padding:4px 6px}
+.item.dim{opacity:.62}
 </style>
 </head>
 <body>
@@ -56,9 +73,27 @@ h3{margin:0 0 8px;font-size:15px}
 <section id="tab1">
   <h1>⚡ POKÉ <span>COUNTER</span></h1>
   <p class="sub">상대 포켓몬 이름을 입력하면, 약점을 찌르는 카운터를 찾아줘요.</p>
+  <button type="button" id="install">📲 홈 화면에 앱으로 설치</button>
+  <div id="iosHint">안드로이드 크롬 메뉴(⋮)에서 <b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 눌러도 돼요. 아이폰은 공유 버튼 → <b>홈 화면에 추가</b>예요.</div>
   <input id="q" type="search" placeholder="예: 피카츄, 팬텀, 망나뇽, 뮤츠" autocomplete="off" autocapitalize="off">
   <div id="sug" class="sug hide"></div>
   <div id="status" class="msg">도감 불러오는 중…</div>
+  <div class="seg" id="modeSeg" role="group" aria-label="상성 배율">
+    <button type="button" data-go="0" aria-pressed="true">본편 배율</button>
+    <button type="button" data-go="1" aria-pressed="false">포켓몬 GO 배율</button>
+  </div>
+  <details id="ownBox" class="card">
+    <summary>내 포켓몬 <span class="sub2">(<span id="ownCount">0</span>마리)</span></summary>
+    <p class="small">포켓몬 GO는 보유 목록을 외부 앱에 제공하지 않아서 자동으로 읽어올 수 없어요. 아래에서 직접 추가하세요. 목록은 이 기기의 브라우저에만 저장돼요.</p>
+    <input id="ownQ" type="search" placeholder="추가할 포켓몬 이름 (예: 팬텀)" autocomplete="off" autocapitalize="off">
+    <div id="ownSug" class="sug hide"></div>
+    <div id="ownList" class="ownlist"></div>
+    <label class="small" for="bulk">여러 마리 한 번에 추가 (줄바꿈이나 쉼표로 구분)</label>
+    <textarea id="bulk" rows="3" placeholder="예: 피카츄, 팬텀, 망나뇽"></textarea>
+    <button type="button" class="btn" id="bulkAdd">붙여넣은 목록 추가</button>
+    <div id="bulkMsg" class="small" role="status"></div>
+    <button type="button" class="btn sec" id="ownClear">내 포켓몬 모두 지우기</button>
+  </details>
   <div id="result"></div>
 </section>
 
