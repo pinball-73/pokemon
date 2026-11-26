@@ -155,6 +155,13 @@ const pref = {go: false, view: null};
 try { owned = (JSON.parse(localStorage.getItem(OWN_KEY) || '[]') || []).filter(Number.isInteger); } catch (e) {}
 try { Object.assign(pref, JSON.parse(localStorage.getItem(PREF_KEY) || '{}')); } catch (e) {}
 goMode = !!pref.go;
+/* ---------- 날씨 부스트 (GO: 해당 타입 기술 위력 x1.2) ---------- */
+const WEATHER = {
+  sunny:{ko:'맑음',types:['grass','ground','fire']}, rainy:{ko:'비',types:['water','electric','bug']},
+  pcloudy:{ko:'구름 조금',types:['normal','rock']}, cloudy:{ko:'흐림',types:['fairy','fighting','poison']},
+  windy:{ko:'바람',types:['dragon','flying','psychic']}, snow:{ko:'눈',types:['ice','steel']}, fog:{ko:'안개',types:['dark','ghost']}
+};
+const wxBoost = t => (goMode && pref.wx && WEATHER[pref.wx] && WEATHER[pref.wx].types.includes(t)) ? 1.2 : 1;
 let DEXMAP = new Map();
 const saveOwned = () => { try { localStorage.setItem(OWN_KEY, JSON.stringify(owned)); } catch (e) {} };
 const savePref = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch (e) {} };
@@ -165,7 +172,7 @@ const view = () => pref.view || (owned.length ? 'owned' : 'all');
 function scoreOf(p, target) {
   let off = 0, bt = null;
   for (const t of p.types) {
-    const m = E(t, target.types);
+    const m = Number((E(t, target.types) * wxBoost(t)).toFixed(4));
     if (m > off) { off = m; bt = t; }
   }
   let def = 0;
@@ -259,6 +266,7 @@ function render() {
   const empty = (v === 'owned' && !owned.length)
     ? '<div class="msg">내 포켓몬을 먼저 추가해 주세요.<button type="button" class="btn sec" id="openOwn">내 포켓몬 추가하기</button></div>'
     : '<div class="msg">조건에 맞는 포켓몬이 없어요. 위 체크를 꺼보세요.</div>';
+  const wxNote = (pref.wx && WEATHER[pref.wx]) ? (goMode ? ` 날씨 "${WEATHER[pref.wx].ko}" 부스트(${WEATHER[pref.wx].types.map(x => TYPE_KO[x]).join('·')} 타입 x1.2)를 공격 배율에 곱했어요.` : ` 날씨 "${WEATHER[pref.wx].ko}"는 GO 배율 모드에서만 반영돼요.`) : '';
   const note = goMode
     ? '포켓몬 GO 배율이에요. 효과 굉장함 1.6배, 별로 0.625배, 효과 없음은 0.391배(이중 저항)로 계산해요. GO에서 실제 위력은 사용하는 기술의 타입·위력과 CP, 레벨에 크게 좌우돼요. 이 계산은 포켓몬 본인 타입만 보는 참고용이에요.'
     : '공격 = 그 포켓몬의 타입 중 상대에게 가장 잘 통하는 배율, 받는 피해 = 상대 타입이 그 포켓몬에게 주는 최대 배율. 타입만 보는 계산이라 실제 기술·특성·종족값은 반영하지 않아요. 메가진화·리전폼은 기본 폼 기준이에요.';
@@ -280,11 +288,12 @@ function render() {
       <label class="toggle"><input type="checkbox" id="safe" ${safe ? 'checked' : ''}> 상대 타입 공격을 1배 이하로 받는 포켓몬만</label>
       ${items || empty}
       ${recs.length > shown ? '<button type="button" class="btn sec" id="more">더 보기</button>' : ''}
-      <p class="small">${note}</p>
+      <p class="small">${note}${wxNote}</p>
     </div>`;
 }
 
 function syncMode() {
+  document.querySelectorAll('#modeSeg2 button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.go === '1') === goMode)));
   document.querySelectorAll('#modeSeg button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.go === '1') === goMode)));
 }
 
@@ -302,7 +311,7 @@ function addOwned(ids) {
   if (added) saveOwned();
   return {added, dup};
 }
-function afterOwnChange() { renderOwn(); render(); }
+function afterOwnChange() { renderOwn(); render(); if (typeof renderRaids === 'function') renderRaids(); }
 
 /* ---------- 시작 ---------- */
 $('q').addEventListener('input', e => showSug(search(e.target.value)));
@@ -319,7 +328,7 @@ $('modeSeg').addEventListener('click', e => {
   if (!b) return;
   goMode = b.dataset.go === '1';
   pref.go = goMode; savePref(); syncMode();
-  shown = 30; render();
+  shown = 30; render(); renderRaids();
 });
 $('result').addEventListener('click', e => {
   const vb = e.target.closest('[data-view]');
@@ -381,6 +390,170 @@ $('ownClear').addEventListener('click', () => {
   owned = []; saveOwned(); $('bulkMsg').textContent = '모두 지웠어요.'; afterOwnChange();
 });
 
+
+/* ---------- 레이드 준비 ---------- */
+const RAID_KEY = 'pc_raids_v1', MEMO_KEY = 'pc_memo_v1', RFILE_KEY = 'pc_raidfile_v1';
+const TIER = {'5':'5성','mega':'메가','smega':'슈퍼 메가','shadow':'섀도우','3':'3성','1':'1성','max':'맥스 배틀','etc':'기타'};
+const TIER_ORDER = Object.keys(TIER);
+let RAIDFILE = {updated: '', source: '', raids: []};
+let rst = {custom: [], hidden: [], showEnded: false};
+let memos = {};
+try { Object.assign(rst, JSON.parse(localStorage.getItem(RAID_KEY) || '{}')); } catch (e) {}
+try { memos = JSON.parse(localStorage.getItem(MEMO_KEY) || '{}') || {}; } catch (e) {}
+const saveRst = () => { try { localStorage.setItem(RAID_KEY, JSON.stringify(rst)); } catch (e) {} };
+const saveMemos = () => { try { localStorage.setItem(MEMO_KEY, JSON.stringify(memos)); } catch (e) {} };
+
+async function loadRaidFile() {
+  try {
+    const r = await fetch('raids.json', {cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    RAIDFILE = await r.json();
+    try { localStorage.setItem(RFILE_KEY, JSON.stringify(RAIDFILE)); } catch (e) {}
+  } catch (e) {
+    try { const c = JSON.parse(localStorage.getItem(RFILE_KEY) || 'null'); if (c) RAIDFILE = c; } catch (e2) {}
+  }
+}
+const raidFileP = loadRaidFile();
+
+const pad2 = n => String(n).padStart(2, '0');
+function todayStr() { const d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+const dayNum = s => { const [y, m, d] = s.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); };
+function raidStatus(r) {
+  const t = todayStr();
+  if (r.end && r.end < t) return {k: 'ended', t: '종료'};
+  if (r.start && r.start > t) return {k: 'soon', t: 'D-' + (dayNum(r.start) - dayNum(t)) + ' 예정'};
+  return {k: 'live', t: '진행 중'};
+}
+const md = s => s ? Number(s.slice(5, 7)) + '/' + Number(s.slice(8, 10)) : '?';
+const rangeText = r => (r.start === r.end || !r.end) ? md(r.start) : md(r.start) + ' ~ ' + md(r.end);
+
+function allRaids() {
+  const file = (RAIDFILE.raids || []).filter(r => !rst.hidden.includes(r.id)).map(r => ({...r, custom: false}));
+  const cust = (rst.custom || []).map(r => ({...r, custom: true}));
+  const ord = {live: 0, soon: 1, ended: 2};
+  return file.concat(cust).filter(r => DEXMAP.has(r.pid))
+    .map(r => ({r, st: raidStatus(r)}))
+    .filter(x => rst.showEnded || x.st.k !== 'ended')
+    .sort((a, b) => ord[a.st.k] - ord[b.st.k] || TIER_ORDER.indexOf(a.r.tier) - TIER_ORDER.indexOf(b.r.tier) || (a.r.start || '').localeCompare(b.r.start || ''));
+}
+
+function raidCard({r, st}) {
+  const p = DEXMAP.get(r.pid);
+  const ws = [];
+  for (const a of TYPES) { const m = E(a, p.types); if (m > 1) ws.push([a, m]); }
+  ws.sort((x, y) => y[1] - x[1]);
+  const boosted = (goMode && pref.wx && WEATHER[pref.wx]) ? ws.filter(([a]) => WEATHER[pref.wx].types.includes(a)).map(([a]) => a) : [];
+  let tops = recommendOwned(p, false).slice(0, 3), topLabel = '내 포켓몬 TOP3 (공격 배율 순)';
+  if (!owned.length) { tops = recommendAll(p, true).slice(0, 3); topLabel = '도감 추천 TOP3 (내 포켓몬을 추가하면 내 것으로 바뀌어요)'; }
+  const topHtml = tops.length ? tops.map(x => `<span class="oc"><img src="${sprite(x.p.id)}" alt="" loading="lazy">${esc(x.p.ko)} <b class="good">${fmtAny(x.off)}</b><span class="sub2"> 받는 ${fmtAny(x.def)}</span></span>`).join('') : '<span class="small">추천할 포켓몬이 없어요.</span>';
+  const memo = memos[r.id] || '';
+  return `<div class="card rc ${st.k}" data-rid="${esc(r.id)}">
+    <div class="rh">
+      <img src="${sprite(p.id)}" alt="">
+      <div class="rm">
+        <div class="nm"><b>${esc(p.ko)}</b> ${r.label ? `<span class="sub2">${esc(r.label)}</span>` : ''}</div>
+        <div><span class="chip t-${esc(r.tier)}">${esc(TIER[r.tier] || r.tier)}</span><span class="chip st-${st.k}">${esc(st.t)}</span><span class="sub2">${esc(rangeText(r))}</span></div>
+        <div style="margin-top:4px">${p.types.map(badge).join('')}</div>
+      </div>
+    </div>
+    <div class="small" style="margin-top:8px">약점 ${ws.length ? ws.map(([a, m]) => badge(a) + '<span class="sub2">' + fmtAny(m) + '</span>').join(' ') : '없음'}</div>
+    ${boosted.length ? `<div class="small good">날씨 부스트와 겹치는 약점: ${boosted.map(a => TYPE_KO[a]).join(', ')}</div>` : ''}
+    ${r.note ? `<div class="small">${esc(r.note)}</div>` : ''}
+    <div class="small" style="margin-top:8px">${topLabel}</div>
+    <div class="ownlist">${topHtml}</div>
+    <div class="btns">
+      <button type="button" class="btn sec" data-act="open">카운터 전체 보기</button>
+      <button type="button" class="btn sec" data-act="${r.custom ? 'del' : 'hide'}">${r.custom ? '삭제' : '숨기기'}</button>
+    </div>
+    <details${memo ? ' open' : ''}><summary class="small">메모${memo ? ' ✎' : ''}</summary>
+      <textarea rows="3" data-memo="${esc(r.id)}" placeholder="예: 3명 클리어, 내 팀 조합, 날씨 등">${esc(memo)}</textarea></details>
+  </div>`;
+}
+
+function renderRaids() {
+  const box = $('raidBox');
+  if (!box || !DEX.length) return;
+  const wx = Object.entries(WEATHER).map(([k, v]) => `<button type="button" data-wx="${k}" aria-pressed="${pref.wx === k}">${v.ko}</button>`).join('');
+  const wxInfo = pref.wx && WEATHER[pref.wx]
+    ? `부스트 타입: ${WEATHER[pref.wx].types.map(badge).join('')} ${goMode ? '(공격 배율에 x1.2 반영 중)' : '— GO 배율 모드에서만 반영돼요'}`
+    : '날씨를 고르면 추천 점수에 부스트(x1.2)를 반영해요. 다시 누르면 해제.';
+  const list = allRaids();
+  const hiddenN = (rst.hidden || []).length;
+  box.innerHTML = `
+    <p class="sub">이번 주 레이드 보스와 약점, 내 포켓몬 카운터를 한눈에.</p>
+    <div class="card"><h3>오늘 날씨</h3>
+      <div class="seg wx" id="wxSeg" role="group" aria-label="날씨">${wx}</div>
+      <div class="small">${wxInfo}</div>
+      <div class="seg" id="modeSeg2" role="group" aria-label="상성 배율">
+        <button type="button" data-go="0" aria-pressed="${!goMode}">본편 배율</button>
+        <button type="button" data-go="1" aria-pressed="${goMode}">포켓몬 GO 배율</button>
+      </div>
+    </div>
+    ${list.length ? list.map(raidCard).join('') : '<div class="msg">표시할 레이드가 없어요. 아래 일정 편집에서 추가하거나 "종료된 일정 보기"를 켜 보세요.</div>'}
+    <div class="small">일정 파일 갱신일 ${esc(RAIDFILE.updated || '없음')} · ${esc(RAIDFILE.source || '')}</div>
+    <details class="card" id="editBox">
+      <summary>일정 편집</summary>
+      <label class="toggle"><input type="checkbox" id="showEnded" ${rst.showEnded ? 'checked' : ''}> 종료된 일정도 보기</label>
+      <p class="small">보스 이름</p><input id="rName" type="text" placeholder="예: 칠색조" autocomplete="off">
+      <div class="two">
+        <div><p class="small">등급</p><select id="rTier">${TIER_ORDER.map(k => `<option value="${k}">${TIER[k]}</option>`).join('')}</select></div>
+        <div><p class="small">폼·메모(선택)</p><input id="rLabel" type="text" placeholder="예: 섀도우"></div>
+      </div>
+      <div class="two">
+        <div><p class="small">시작일</p><input id="rStart" type="date"></div>
+        <div><p class="small">종료일</p><input id="rEnd" type="date"></div>
+      </div>
+      <button type="button" class="btn" id="rAdd">일정 추가</button>
+      <div id="rMsg" class="small" role="status"></div>
+      ${hiddenN ? `<button type="button" class="btn sec" id="rRestore">숨긴 일정 ${hiddenN}개 복원</button>` : ''}
+    </details>`;
+}
+
+$('raidBox').addEventListener('click', e => {
+  const wb = e.target.closest('[data-wx]');
+  if (wb) { pref.wx = pref.wx === wb.dataset.wx ? '' : wb.dataset.wx; savePref(); renderRaids(); render(); return; }
+  const gb = e.target.closest('#modeSeg2 button');
+  if (gb) { goMode = gb.dataset.go === '1'; pref.go = goMode; savePref(); syncMode(); shown = 30; render(); renderRaids(); return; }
+  if (e.target.id === 'rRestore') { rst.hidden = []; saveRst(); renderRaids(); return; }
+  if (e.target.id === 'rAdd') {
+    const nm = $('rName').value.trim(), msg = $('rMsg');
+    const p = findByName(nm) || search(nm)[0];
+    if (!p) { msg.textContent = '보스 이름을 찾지 못했어요.'; return; }
+    const s = $('rStart').value || todayStr(), en = $('rEnd').value || s;
+    if (en < s) { msg.textContent = '종료일이 시작일보다 빨라요.'; return; }
+    rst.custom.push({id: 'c' + Date.now(), pid: p.id, tier: $('rTier').value, label: $('rLabel').value.trim(), start: s, end: en, note: ''});
+    saveRst(); renderRaids();
+    const b = $('editBox'); if (b) b.open = true;
+    $('rMsg').textContent = p.ko + ' 추가했어요.';
+    return;
+  }
+  const card = e.target.closest('[data-rid]');
+  const act = e.target.closest('[data-act]');
+  if (!card || !act) return;
+  const id = card.dataset.rid;
+  const item = allRaids().find(x => x.r.id === id);
+  if (act.dataset.act === 'open' && item) { setTab('1'); select(DEXMAP.get(item.r.pid)); window.scrollTo(0, 0); }
+  if (act.dataset.act === 'hide') { rst.hidden.push(id); saveRst(); renderRaids(); }
+  if (act.dataset.act === 'del') { rst.custom = rst.custom.filter(r => r.id !== id); saveRst(); renderRaids(); }
+});
+$('raidBox').addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.memo) { memos[t.dataset.memo] = t.value; saveMemos(); }
+});
+$('raidBox').addEventListener('change', e => {
+  if (e.target.id === 'showEnded') { rst.showEnded = e.target.checked; saveRst(); renderRaids(); const b = $('editBox'); if (b) b.open = true; }
+});
+
+/* ---------- 탭 ---------- */
+function setTab(t) {
+  pref.tab = t; savePref();
+  $('tab1').classList.toggle('hide', t !== '1');
+  $('tab2').classList.toggle('hide', t !== '2');
+  document.querySelectorAll('#tabSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === t)));
+  if (t === '2') renderRaids();
+}
+$('tabSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTab(b.dataset.tab); });
+
 function boot() {
   $('status').textContent = '도감 불러오는 중… (처음 한 번만 걸려요)';
   loadDex().then(d => {
@@ -391,11 +564,13 @@ function boot() {
     if ($('q').value) showSug(search($('q').value));
     renderOwn();
     render();
+    raidFileP.then(renderRaids);
   }).catch(err => {
     $('status').innerHTML = '도감을 불러오지 못했어요 (' + esc(err.message) + ')<button class="btn sec" id="retry">다시 시도</button>';
     $('retry').onclick = boot;
   });
 }
+setTab(pref.tab === '2' ? '2' : '1');
 syncMode();
 boot();
 

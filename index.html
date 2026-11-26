@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Poké Counter</title>
+<title>Pokémon Counter</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Poké Counter">
+<meta name="apple-mobile-web-app-title" content="Pokémon Counter">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#14161f">
 <style>
@@ -65,10 +65,20 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border-radius:12px;border:1
 .oc img{width:28px;height:28px}
 .oc button{border:0;background:none;color:var(--sub);font-size:14px;padding:4px 6px}
 .item.dim{opacity:.62}
+.rh{display:flex;gap:10px;align-items:center}.rh img{width:72px;height:72px}.rm{min-width:0;flex:1}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-right:6px;background:var(--line);color:var(--tx)}
+.t-5{background:#7a4cc2}.t-mega{background:#d4572b}.t-smega{background:#b03a8e}.t-shadow{background:#4a4f70}.t-max{background:#2b8aa8}
+.st-live{background:#2f9e5a;color:#fff}.st-soon{background:#c9951a;color:#111}.st-ended{background:#555}
+.rc.ended{opacity:.6}.btns{display:flex;gap:8px}.btns .btn{margin-top:8px}
+.seg.wx{flex-wrap:wrap}.seg.wx button{flex:1 0 22%}
+.two{display:flex;gap:8px}.two>div{flex:1;min-width:0}
+select,input[type=date]{width:100%;font-size:16px;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx)}
+#tabSeg{margin:0 0 12px}
 </style>
 </head>
 <body>
 <div class="wrap">
+<div class="seg" id="tabSeg" role="group" aria-label="화면"><button type="button" data-tab="1" aria-pressed="true">카운터</button><button type="button" data-tab="2" aria-pressed="false">레이드 준비</button></div>
 
 <section id="tab1">
   <h1>⚡ POKÉ <span>COUNTER</span></h1>
@@ -97,6 +107,7 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border-radius:12px;border:1
   <div id="result"></div>
 </section>
 
+<section id="tab2" class="hide"><h1>🗓️ 레이드 <span>준비</span></h1><div id="raidBox"></div></section>
 
 </div>
 
