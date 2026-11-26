@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Poké Counter",
-  "short_name": "Poké Counter",
+  "name": "Pokémon Counter",
+  "short_name": "Pokémon Counter",
   "description": "타깃 포켓몬의 약점과 상성 좋은 카운터를 알려줘요 (일반 / 포켓몬 GO)",
   "lang": "ko",
   "start_url": "./index.html",

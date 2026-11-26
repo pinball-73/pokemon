@@ -1,4 +1,4 @@
-const CACHE = 'pc-shell-v7';
+const CACHE = 'pc-shell-v8';
 const SHELL = ['./', './index.html', './app.js', './raids.json', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
